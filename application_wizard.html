@@ -1,0 +1,711 @@
+<!-- Chosen Palette: Warm Neutral & Teal Accent (Page: bg-gray-50, Card: bg-white, Accent: text-teal-600/bg-teal-500) -->
+<!-- Application Structure Plan: Refactored to include a Job Selection screen (Step 0) followed by the application wizard (Steps 1-4). This creates a more realistic hiring flow. All form data is now saved to a 'formData' object for persistence between steps. -->
+<!-- Visualization & Content Choices: Doughnut Chart (Completion Ratio) on final step. -->
+<!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Job Application Wizard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        /* Hide default number input arrows */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .job-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .job-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-extrabold text-gray-800">Digital Employment Center</h1>
+            <p class="text-lg text-gray-500 mt-2">Find a role, review the details, and complete your application.</p>
+        </header>
+
+        <!-- Progress Bar and Steps Indicator -->
+        <div class="bg-white p-4 rounded-xl shadow-lg mb-6">
+            <div class="flex justify-between items-center text-sm font-medium text-gray-500 mb-2">
+                <span id="step-title" class="text-teal-600 font-semibold">Step 1: Select a Job Posting</span>
+                <span id="progress-text">0% Complete</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                <div id="progress-bar" class="bg-teal-500 h-2.5 rounded-full transition-all duration-500 ease-out" style="width: 0%;"></div>
+            </div>
+            <div class="flex justify-between mt-2 text-xs">
+                <span class="step-label text-teal-600">Selection</span>
+                <span class="step-label">Personal</span>
+                <span class="step-label">History</span>
+                <span class="step-label">Review</span>
+            </div>
+        </div>
+
+        <!-- Main Form Card Container -->
+        <div class="bg-white p-6 sm:p-10 rounded-xl shadow-2xl transition-all duration-300">
+
+            <div id="form-content">
+                <!-- Step Content will be dynamically inserted here -->
+            </div>
+
+            <!-- Navigation Buttons -->
+            <div class="mt-8 pt-6 border-t border-gray-100 flex justify-between">
+                <button id="back-button" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition duration-150 font-medium" style="visibility: hidden;">
+                    ← Back
+                </button>
+                <button id="next-button" class="px-6 py-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 transition duration-150 font-semibold shadow-md">
+                    Continue →
+                </button>
+                <button id="submit-button" class="hidden px-6 py-2 bg-green-600 text-white rounded-full hover:bg-green-700 transition duration-150 font-semibold shadow-md">
+                    Submit Application
+                </button>
+            </div>
+        </div>
+        
+        <!-- Custom Message Box/Modal -->
+        <div id="message-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div class="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full text-center">
+                <h3 id="modal-title" class="text-xl font-bold mb-3 text-teal-700"></h3>
+                <p id="modal-content" class="text-gray-700 mb-6"></p>
+                <button id="modal-close" class="px-6 py-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 transition font-semibold">
+                    Close
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Data Definitions ---
+        const JOB_POSTINGS = {
+            "retail_associate": {
+                title: "Retail Associate - Part Time",
+                summary: "Friendly, motivated associate needed for weekend and evening shifts.",
+                description: "Engage with customers, operate POS, restock inventory, and maintain store appearance. Excellent customer service and organizational skills required.",
+                requirements: ["High School Diploma or equivalent", "POS experience preferred", "Weekend availability a must"],
+                pay: "$15.50 - $18.00 / hr"
+            },
+            "junior_analyst": {
+                title: "Junior Financial Analyst Intern",
+                summary: "Entry-level position supporting the finance department with data analysis and reporting.",
+                description: "Assist in budget preparation, reconciliation, and financial modeling. Requires strong Excel and analytical skills. This is a 12-week paid internship.",
+                requirements: ["Currently enrolled in a Finance or Accounting degree program", "Proficient in Excel and PowerPoint", "Minimum 1-year coursework in financial modeling"],
+                pay: "$20.00 / hr"
+            },
+            "tech_support": {
+                title: "Level 1 Technical Support Specialist",
+                summary: "Provide first-line technical assistance to internal staff and external clients.",
+                description: "Troubleshoot software and hardware issues, document resolutions, and escalate complex problems. Requires excellent communication and diagnostic skills.",
+                requirements: ["1+ year experience in a technical support role or equivalent certification", "Familiarity with ticketing systems (e.g., Zendesk)", "Strong knowledge of Windows and macOS environments"],
+                pay: "$45,000 - $55,000 / yr"
+            },
+            "marketing_coordinator": {
+                title: "Marketing Coordinator - Social Media Focus",
+                summary: "Develop and manage social media campaigns and content across various platforms.",
+                description: "Execute social media strategy, create engaging posts, analyze performance metrics, and collaborate with sales teams. Strong creativity and attention to detail required.",
+                requirements: ["BA/BS in Marketing or Communications", "2+ years experience managing business social media", "Proficiency in Graphic Design software (Canva/Adobe)"],
+                pay: "$55,000 - $65,000 / yr"
+            },
+            "warehouse_associate": {
+                title: "Warehouse Associate - Full Time",
+                summary: "Handle shipping, receiving, and inventory management in a fast-paced environment.",
+                description: "Accurately pick, pack, and ship customer orders. Operate equipment safely and perform general warehouse duties. Requires physical stamina and commitment to safety.",
+                requirements: ["Ability to lift 50 lbs and stand for long periods", "Forklift certification (or willingness to obtain)", "Punctual and reliable transportation"],
+                pay: "$18.50 - $22.00 / hr"
+            }
+        };
+
+        const STEP_TITLES = [
+            "Select a Job Posting",
+            "Personal & Contact Information",
+            "Position & Availability Details",
+            "Education & Employment History",
+            "Compliance & References",
+            "Review & Certification"
+        ];
+        
+        // --- State Management ---
+        let currentStep = 0;
+        let completionRatioChart;
+        const totalKeyFields = 30; // Static field count for visual progress
+        let formData = { selectedJob: null };
+
+        // --- DOM Elements ---
+        const contentDiv = document.getElementById('form-content');
+        const backButton = document.getElementById('back-button');
+        const nextButton = document.getElementById('next-button');
+        const submitButton = document.getElementById('submit-button');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const stepTitle = document.getElementById('step-title');
+        const messageModal = document.getElementById('message-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalContent = document.getElementById('modal-content');
+        const modalClose = document.getElementById('modal-close');
+
+        // --- HTML Section Templates (Steps 1-5 use original content) ---
+        // Step 0: Job Selection (Dynamic)
+        const JOB_SELECTION_SECTION = `
+            <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 1: Select a Position</h2>
+            <p class="text-sm text-gray-500 mb-6">Review the available job postings below and click 'Select & Apply' to begin your application for that role.</p>
+            <div class="space-y-6" id="job-list-container">
+                <!-- Job cards will be inserted here -->
+            </div>
+        `;
+
+        // Original Steps 1-5 (now index 1 through 5 in FORM_SECTIONS)
+        // Note: The content of these templates must use the 'name' attribute for saving data.
+        const APPLICATION_SECTIONS = [
+            // Step 1: Personal & Contact Information
+            `
+                <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 2: Personal & Contact Information</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="fullName" class="block text-sm font-medium text-gray-700">Full Legal Name</label>
+                        <input type="text" id="fullName" name="fullName" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                        <input type="email" id="email" name="email" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+                    <div>
+                        <label for="phone" class="block text-sm font-medium text-gray-700">Phone Number</label>
+                        <input type="tel" id="phone" name="phone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="address" class="block text-sm font-medium text-gray-700">Mailing Address</label>
+                        <input type="text" id="address" name="address" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+
+                    <div class="flex items-center space-x-4 pt-4 md:col-span-2 border-t mt-4">
+                        <span class="text-sm font-medium text-gray-700">Legal Authorization:</span>
+                        <div class="flex items-center">
+                            <input id="authorizedYes" name="legalAuthorized" type="radio" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300" value="Yes" required>
+                            <label for="authorizedYes" class="ml-2 block text-sm text-gray-900">Yes</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input id="authorizedNo" name="legalAuthorized" type="radio" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300" value="No">
+                            <label for="authorizedNo" class="ml-2 block text-sm text-gray-900">No</label>
+                        </div>
+                    </div>
+                </div>
+            `,
+            // Step 2: Position & Availability Details
+            `
+                <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 3: Position & Availability Details</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="position" class="block text-sm font-medium text-gray-700">Position Title Applied For</label>
+                        <input type="text" id="position" name="position" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required readonly>
+                    </div>
+                    <div>
+                        <label for="startDate" class="block text-sm font-medium text-gray-700">Desired Start Date</label>
+                        <input type="date" id="startDate" name="startDate" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="desiredPay" class="block text-sm font-medium text-gray-700">Desired Pay/Salary (Hourly or Annually)</label>
+                        <input type="text" id="desiredPay" name="desiredPay" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" placeholder="e.g., $15/hr or $35,000/yr">
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Schedule Availability</h3>
+                <p class="text-sm text-gray-500 mb-4">Required for Part-Time/Retail Roles. Check all shifts you are regularly available.</p>
+
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr class="bg-gray-50">
+                                <th class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shift</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Mon</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tue</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Wed</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Thu</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Fri</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sat</th>
+                                <th class="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Sun</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${['Morning', 'Afternoon', 'Evening'].map(time => `
+                                <tr>
+                                    <td class="px-3 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${time}</td>
+                                    ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-center">
+                                            <input type="checkbox" name="shift-${time}-${day}" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300 rounded">
+                                        </td>
+                                    `).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Skills & Experience Checklist</h3>
+                <p class="text-sm text-gray-500 mb-4">Check all that apply to your current skills or coursework.</p>
+                <div class="grid grid-cols-2 gap-4">
+                    ${[
+                        "Proficient in Microsoft Office (Word, Excel, Outlook)",
+                        "Experienced with Social Media Content Creation (Instagram, TikTok)",
+                        "Experience operating a Point-of-Sale (POS) System",
+                        "Able to lift up to 25 pounds",
+                        "Formal training or coursework in Finance/Accounting",
+                        "Experience with Graphic Design Software (e.g., Canva)" // Added for new jobs
+                    ].map((skill, index) => `
+                        <div class="flex items-start">
+                            <input id="skill-${index}" type="checkbox" name="skill-${index}" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300 rounded mt-1">
+                            <label for="skill-${index}" class="ml-3 text-sm text-gray-700">${skill}</label>
+                        </div>
+                    `).join('')}
+                </div>
+            `,
+            // Step 3: Education & Employment History
+            `
+                <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 4: Education & Employment History</h2>
+                <div class="space-y-6">
+                    ${['High School', 'College/Technical School (if applicable)'].map(schoolType => `
+                        <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                            <h3 class="font-semibold text-lg mb-3 text-teal-700">${schoolType}</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500">School/Program Name</label>
+                                    <input type="text" name="${schoolType.split(' ')[0]}Name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500">Location</label>
+                                    <input type="text" name="${schoolType.split(' ')[0]}Location" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500">Dates Attended</label>
+                                    <input type="text" name="${schoolType.split(' ')[0]}Dates" placeholder="e.g., 2018 - 2022" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-gray-500">Degree/Certification Received</label>
+                                    <input type="text" name="${schoolType.split(' ')[0]}Degree" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h3 class="text-xl font-bold text-gray-700 mt-8 mb-4">Technical Skills</h3>
+                <p class="text-sm text-gray-500 mb-4">Required for Tech Support/Internship roles. List relevant software, coding languages, or systems you are proficient in (e.g., HTML, Canva, Typing Speed WPM).</p>
+                <textarea name="technicalSkills" rows="4" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500"></textarea>
+
+                <h2 class="text-2xl font-bold text-gray-700 mt-8 mb-6">Section 4: Employment History</h2>
+                <p class="text-sm text-gray-500 mb-4">List three most recent roles. Include volunteer work or school projects if no prior employment.</p>
+                ${[1, 2, 3].map(i => `
+                    <div class="p-4 border border-gray-200 rounded-lg bg-gray-50 mb-4">
+                        <h3 class="font-semibold text-lg mb-3 text-teal-700">Job / Project ${i}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Employer Name & Location</label>
+                                <input type="text" name="emp${i}Name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Dates Employed</label>
+                                <input type="text" name="emp${i}Dates" placeholder="MM/YYYY - MM/YYYY" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-medium text-gray-500">Job Title & Duties (Summary)</label>
+                                <textarea name="emp${i}Duties" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm"></textarea>
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-medium text-gray-500">Reason for Leaving</label>
+                                <input type="text" name="emp${i}Reason" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            `,
+            // Step 4: Compliance & References
+            `
+                <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 5: Compliance & References</h2>
+                <h3 class="text-xl font-bold text-gray-700 mb-4">Required Attestations (Compliance Focus)</h3>
+                <div class="space-y-4 p-4 border border-teal-200 rounded-lg bg-teal-50">
+                    ${[
+                        { id: 'felony', label: 'Have you ever been convicted of a felony?' },
+                        { id: 'backgroundCheck', label: 'Are you willing to consent to a full background check, credit check, and drug screening, where permitted by law?' },
+                        { id: 'confidentiality', label: 'Do you understand that this position may require you to handle sensitive, confidential, or proprietary information?' }
+                    ].map(item => `
+                        <div class="flex justify-between items-center py-2 border-b border-teal-300 last:border-b-0">
+                            <label for="${item.id}" class="text-sm font-medium text-gray-700">${item.label}</label>
+                            <div class="flex space-x-4">
+                                <label class="flex items-center">
+                                    <input type="radio" name="${item.id}" value="Yes" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300">
+                                    <span class="ml-2 text-sm text-gray-900">Yes</span>
+                                </label>
+                                <label class="flex items-center">
+                                    <input type="radio" name="${item.id}" value="No" class="focus:ring-teal-500 h-4 w-4 text-teal-600 border-gray-300">
+                                    <span class="ml-2 text-sm text-gray-900">No</span>
+                                </label>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h2 class="text-2xl font-bold text-gray-700 mt-8 mb-6">Short Answer Question</h2>
+                <p class="text-sm text-gray-500 mb-4">Describe a time you successfully helped a customer or peer solve a complex problem. (Limit your answer to 3-5 sentences.)</p>
+                <textarea name="problemSolve" rows="5" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required></textarea>
+
+                <h2 class="text-2xl font-bold text-gray-700 mt-8 mb-6">Professional References</h2>
+                <p class="text-sm text-gray-500 mb-4">Provide contact information for three non-related references (supervisors, teachers, mentors).</p>
+
+                ${[1, 2, 3].map(i => `
+                    <div class="p-4 border border-gray-200 rounded-lg bg-gray-50 mb-4">
+                        <h3 class="font-semibold text-lg mb-3 text-teal-700">Reference ${i}</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Name</label>
+                                <input type="text" name="ref${i}Name" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Relationship (e.g., Teacher)</label>
+                                <input type="text" name="ref${i}Relationship" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Phone Number</label>
+                                <input type="tel" name="ref${i}Phone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500">Email Address</label>
+                                <input type="email" name="ref${i}Email" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 text-sm">
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            `,
+            // Step 5: Review & Certification
+            `
+                <h2 class="text-2xl font-bold text-gray-700 mb-6">Step 6: Review & Certification</h2>
+                <div class="p-6 bg-teal-50 border border-teal-300 rounded-lg mb-8">
+                    <p class="text-lg font-semibold text-teal-800 flex items-center mb-4">
+                        Application Completion Overview
+                    </p>
+                    <div class="chart-container mb-6">
+                        <canvas id="completionChart"></canvas>
+                    </div>
+                    <p class="text-sm text-gray-700">The chart above visually represents the number of key fields you have completed versus those remaining. Use the 'Back' button to finalize any missing information before certifying your application.</p>
+                    <p class="text-sm text-gray-700 mt-4 font-semibold">Role Applied For: <span id="review-job-title" class="text-teal-700"></span></p>
+                </div>
+
+                <h3 class="text-xl font-bold text-gray-700 mb-4">Certification Statement</h3>
+                <div class="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                    <p class="text-sm text-gray-600 mb-4">I certify that the information provided in this application is true and complete. I understand that false or misleading information given on this form or during the interview process may result in discharge.</p>
+                    <div class="flex items-center">
+                        <input id="certificationCheck" name="certificationCheck" type="checkbox" class="focus:ring-red-500 h-4 w-4 text-red-600 border-gray-300 rounded" required>
+                        <label for="certificationCheck" class="ml-3 text-base font-medium text-red-600">I agree to the above Certification Statement.</label>
+                    </div>
+
+                    <div class="mt-6">
+                        <label for="mockSignature" class="block text-sm font-medium text-gray-700">Applicant Signature (Type Full Name)</label>
+                        <input type="text" id="mockSignature" name="mockSignature" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+                    <div class="mt-4">
+                        <label for="dateSigned" class="block text-sm font-medium text-gray-700">Date</label>
+                        <input type="date" id="dateSigned" name="dateSigned" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-3 focus:ring-teal-500 focus:border-teal-500" required>
+                    </div>
+                </div>
+            `
+        ];
+
+        // Combine job selection section and application sections
+        const FORM_SECTIONS = [JOB_SELECTION_SECTION, ...APPLICATION_SECTIONS];
+        
+        // --- Core Functions ---
+
+        function showMessage(title, content) {
+            modalTitle.textContent = title;
+            modalContent.textContent = content;
+            messageModal.classList.remove('hidden');
+        }
+
+        modalClose.addEventListener('click', () => {
+            messageModal.classList.add('hidden');
+        });
+
+        function saveStepData() {
+            const formElements = contentDiv.querySelectorAll('input, textarea');
+            formElements.forEach(el => {
+                if (!el.name) return; // Skip elements without a name
+
+                if (el.type === 'radio') {
+                    if (el.checked) {
+                        formData[el.name] = el.value;
+                    }
+                } else if (el.type === 'checkbox') {
+                    // Store checkboxes as boolean or array if needed, but here simple boolean state for named ones
+                    formData[el.name] = el.checked;
+                } else {
+                    formData[el.name] = el.value;
+                }
+            });
+        }
+
+        function restoreStepData() {
+            const formElements = contentDiv.querySelectorAll('input, textarea');
+            formElements.forEach(el => {
+                if (!el.name) return;
+
+                if (formData.hasOwnProperty(el.name)) {
+                    if (el.type === 'radio') {
+                        if (el.value === formData[el.name]) {
+                            el.checked = true;
+                        }
+                    } else if (el.type === 'checkbox') {
+                        el.checked = formData[el.name];
+                    } else {
+                        el.value = formData[el.name];
+                    }
+                }
+            });
+            // Specific case for auto-filling the position title in Step 2
+            if (currentStep === 2 && formData.selectedJob) {
+                document.getElementById('position').value = JOB_POSTINGS[formData.selectedJob].title;
+            }
+        }
+
+        function updateProgress() {
+            let completedCount = 0;
+            
+            // Count all non-checkbox/radio inputs that have content (key fields)
+            const textInputs = document.querySelectorAll('#form-content input:not([type="checkbox"]):not([type="radio"]), #form-content textarea');
+            textInputs.forEach(input => {
+                if (input.value.trim() !== '') {
+                    completedCount++;
+                }
+            });
+
+            // Count required radio groups (e.g., legalAuthorized, felony)
+            document.querySelectorAll('input[type="radio"]').forEach(radio => {
+                if (radio.name && radio.checked) {
+                    completedCount++;
+                }
+            });
+
+            // Using a static total for visual progress, which is a simplification
+            const percentage = Math.min(100, Math.round((completedCount / totalKeyFields) * 100));
+            
+            progressBar.style.width = `${percentage}%`;
+            progressText.textContent = `${percentage}% Complete`;
+
+            if (completionRatioChart) {
+                completionRatioChart.data.datasets[0].data = [completedCount, Math.max(0, totalKeyFields - completedCount)];
+                completionRatioChart.update();
+            }
+        }
+
+        function renderJobSelection() {
+            let html = '';
+            // Render the job cards based on the JOB_POSTINGS object
+            for (const key in JOB_POSTINGS) {
+                const job = JOB_POSTINGS[key];
+                html += `
+                    <div class="job-card p-5 border border-gray-200 rounded-lg bg-white shadow hover:border-teal-400" data-job-key="${key}">
+                        <h3 class="text-xl font-bold text-teal-600">${job.title}</h3>
+                        <p class="text-sm text-gray-500 mt-1 mb-3">${job.summary}</p>
+                        <p class="text-base font-semibold text-gray-700">Pay Range: <span class="text-teal-700">${job.pay}</span></p>
+                        <div class="mt-4 border-t pt-3">
+                            <p class="text-sm font-medium text-gray-700">Key Requirements:</p>
+                            <ul class="list-disc list-inside text-xs text-gray-600 pl-4 space-y-1 mt-1">
+                                ${job.requirements.map(req => `<li>${req}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <button class="select-job-btn mt-4 px-4 py-1.5 bg-teal-500 text-white text-sm rounded-full hover:bg-teal-600 transition font-medium" data-job-key="${key}">
+                            Select & Apply
+                        </button>
+                    </div>
+                `;
+            }
+            contentDiv.innerHTML = JOB_SELECTION_SECTION;
+            document.getElementById('job-list-container').innerHTML = html;
+
+            document.querySelectorAll('.select-job-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    formData.selectedJob = e.target.dataset.jobKey;
+                    handleNavigation('next');
+                });
+            });
+        }
+
+        function loadStep(stepIndex) {
+            currentStep = stepIndex;
+            stepTitle.textContent = `Step ${currentStep + 1}: ${STEP_TITLES[currentStep]}`;
+
+            // Step 0 is the Job Selection Screen
+            if (currentStep === 0) {
+                renderJobSelection();
+            } else {
+                contentDiv.innerHTML = FORM_SECTIONS[currentStep];
+                restoreStepData();
+                
+                // Add listeners for persistence/progress
+                contentDiv.querySelectorAll('input, textarea').forEach(el => {
+                    el.addEventListener('input', updateProgress);
+                    el.addEventListener('change', updateProgress);
+                });
+            }
+
+            // Update button visibility
+            backButton.style.visibility = currentStep > 0 && currentStep < FORM_SECTIONS.length - 1 ? 'visible' : 'hidden';
+            nextButton.classList.toggle('hidden', currentStep === FORM_SECTIONS.length - 1);
+            submitButton.classList.toggle('hidden', currentStep !== FORM_SECTIONS.length - 1);
+            nextButton.textContent = currentStep === 0 ? 'Review Selected Job →' : 'Continue →';
+
+            // Update step labels
+            document.querySelectorAll('.step-label').forEach((label, index) => {
+                label.classList.remove('text-teal-600', 'font-semibold');
+                if (index === currentStep) {
+                    label.classList.add('text-teal-600', 'font-semibold');
+                }
+            });
+
+            // Specific logic for the final step (Review)
+            if (currentStep === FORM_SECTIONS.length - 1) {
+                document.getElementById('review-job-title').textContent = JOB_POSTINGS[formData.selectedJob]?.title || "N/A";
+                renderChart();
+            } else {
+                updateProgress();
+            }
+        }
+
+        function handleNavigation(direction) {
+            if (direction === 'next') {
+                if (currentStep === 0) {
+                    if (!formData.selectedJob) {
+                        showMessage("Missing Selection", "Please select a job posting before continuing to the application.");
+                        return;
+                    }
+                    // For Step 0, we move directly to the next step index.
+                } else {
+                    // Validate current step before saving and moving on
+                    const requiredInputs = contentDiv.querySelectorAll('[required]');
+                    let isValid = true;
+                    
+                    // Simple required validation for demonstration
+                    for (const input of requiredInputs) {
+                        if (input.type === 'text' || input.type === 'email' || input.type === 'tel' || input.type === 'date' || input.tagName === 'TEXTAREA') {
+                            if (input.value.trim() === '') {
+                                isValid = false;
+                                break;
+                            }
+                        } else if (input.type === 'radio' && input.name) {
+                            if (!document.querySelector(`input[name="${input.name}"]:checked`)) {
+                                isValid = false;
+                                break;
+                            }
+                        } else if (input.type === 'checkbox') {
+                            if (!input.checked) {
+                                isValid = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!isValid) {
+                        showMessage("Missing Information", "Please fill out all required fields before moving to the next step.");
+                        return;
+                    }
+
+                    saveStepData(); // Save data before advancing
+                }
+
+                if (currentStep < FORM_SECTIONS.length - 1) {
+                    currentStep++;
+                } else {
+                    // Final submission logic
+                    showMessage("Application Submitted!", `Thank you, ${formData.fullName || 'Applicant'}. Your application for the ${JOB_POSTINGS[formData.selectedJob]?.title || 'selected role'} has been mocked as submitted.`);
+                    return;
+                }
+            } else if (direction === 'back') {
+                saveStepData(); // Save data before going back
+                if (currentStep > 0) {
+                    currentStep--;
+                }
+            }
+            loadStep(currentStep);
+        }
+
+        function renderChart() {
+            const ctx = document.getElementById('completionChart').getContext('2d');
+            const data = [10, 10]; // Placeholder data, updated by updateProgress
+
+            if (completionRatioChart) {
+                completionRatioChart.destroy();
+            }
+
+            completionRatioChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Fields Completed', 'Fields Remaining'],
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#00B8D9', '#E0E0E0'],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                font: { size: 14 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    if (label) {
+                                        let value = context.parsed;
+                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                        const percentage = ((value / total) * 100).toFixed(1) + '%';
+                                        return `${label}: ${value} (${percentage})`;
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            updateProgress();
+        }
+        
+        // --- Event Listeners and Initialization ---
+        backButton.addEventListener('click', () => handleNavigation('back'));
+        nextButton.addEventListener('click', () => handleNavigation('next'));
+        submitButton.addEventListener('click', () => handleNavigation('next'));
+
+        // Initialize the first step (Job Selection)
+        loadStep(0);
+    </script>
+</body>
+</html>
