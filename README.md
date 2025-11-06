@@ -1,2 +1,0 @@
-# BusinessComm
-Job Applications
